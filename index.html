@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="refresh" content="10" />
+    <title>Курсы валют в реальном времени</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+      body {
+        font-family: "Arial", sans-serif;
+        background-color: #f4f4f9;
+        color: #333;
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      h1 {
+        margin-bottom: 20px;
+        color: #2c3e50;
+      }
+      .chart-container {
+        display: flex;
+        flex-direction: row;
+        width: 100%;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 50px;
+      }
+      .chart {
+        width: 45%;
+        height: 70vh;
+        border: 2px solid #ddd;
+        border-radius: 10px;
+        background-color: #fff;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Курсы валют в реальном времени</h1>
+    <div class="chart-container">
+      <div id="chart1" class="chart"></div>
+      <div id="chart2" class="chart"></div>
+    </div>
+    <script>
+      var times = {{.Times}};
+      var usdToEur = {{.USDToEUR}};
+      var btcToUsd = {{.BTCToUSD}};
+
+      // График BTC к USD (слева)
+      var trace1 = {
+          x: times,
+          y: btcToUsd,
+          mode: 'lines+markers',
+          name: 'BTC к USD',
+          line: {color: '#FF5733', width: 3},
+          marker: {size: 6, color: '#FF5733'},
+          hovertemplate: '%{x}<br>BTC к USD: %{y:.2f}<extra></extra>'
+      };
+
+      var layout1 = {
+          title: 'Курс BTC к USD',
+          xaxis: {
+              title: 'Время',
+              showgrid: true,
+              zeroline: false
+          },
+          yaxis: {
+              title: 'Курс',
+              showline: false,
+              side: 'left'
+          },
+          template: 'plotly_white',
+          margin: {l: 60, r: 60, t: 50, b: 50},
+          showlegend: true,
+          legend: {
+              x: 0.5,
+              y: -0.2,
+              xanchor: 'center',
+              orientation: 'h'
+          }
+      };
+
+      Plotly.newPlot('chart1', [trace1], layout1);
+
+      // График USD к EUR (справа)
+      var trace2 = {
+          x: times,
+          y: usdToEur,
+          mode: 'lines+markers',
+          name: 'USD к EUR',
+          line: {color: '#007BFF', width: 3},
+          marker: {size: 6, color: '#007BFF'},
+          hovertemplate: '%{x}<br>USD к EUR: %{y:.4f}<extra></extra>'
+      };
+
+      var layout2 = {
+          title: 'Курс USD к EUR',
+          xaxis: {
+              title: 'Время',
+              showgrid: true,
+              zeroline: false
+          },
+          yaxis: {
+              title: 'Курс',
+              showline: false,
+              side: 'left'
+          },
+          template: 'plotly_white',
+          margin: {l: 60, r: 60, t: 50, b: 50},
+          showlegend: true,
+          legend: {
+              x: 0.5,
+              y: -0.2,
+              xanchor: 'center',
+              orientation: 'h'
+          }
+      };
+
+      Plotly.newPlot('chart2', [trace2], layout2);
+
+      // Включаем функции зума и панорамирования для обоих графиков
+      var update = {
+          dragmode: 'zoom',
+          hovermode: 'closest'
+      };
+      Plotly.relayout('chart1', update);
+      Plotly.relayout('chart2', update);
+    </script>
+  </body>
+</html>
