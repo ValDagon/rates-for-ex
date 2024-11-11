@@ -122,10 +122,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	times := []string{}
 	usdToEur := []float64{}
 	btcToUsd := []float64{}
+	var currentUSDtoEUR, currentBTCtoUSD float64
 	for _, point := range data {
 		times = append(times, point.Time)
 		usdToEur = append(usdToEur, point.USDToEUR)
 		btcToUsd = append(btcToUsd, point.BTCToUSD)
+	}
+
+	if len(data) > 0 {
+		currentUSDtoEUR = data[len(data)-1].USDToEUR
+		currentBTCtoUSD = data[len(data)-1].BTCToUSD
 	}
 
 	// Serialize data to JSON
@@ -146,9 +152,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tmplData := map[string]interface{}{
-		"Times":    template.JS(timesJSON),
-		"USDToEUR": template.JS(usdToEurJSON),
-		"BTCToUSD": template.JS(btcToUsdJSON),
+		"Times":           template.JS(timesJSON),
+		"USDToEUR":        template.JS(usdToEurJSON),
+		"BTCToUSD":        template.JS(btcToUsdJSON),
+		"CurrentUSDtoEUR": currentUSDtoEUR,
+		"CurrentBTCtoUSD": currentBTCtoUSD,
 	}
 
 	// Load template from file
