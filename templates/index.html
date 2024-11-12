@@ -23,7 +23,7 @@
       }
       .chart-container {
         display: flex;
-        flex-direction: row;
+        flex-direction: row; /* Horizontal layout */
         width: 100%;
         justify-content: center;
         align-items: flex-start;
@@ -67,7 +67,7 @@
       <div class="rate">
         <p class="rate-display">
           Current USD to EUR:
-          <strong>{{printf "%.4f" .CurrentUSDtoEUR}}</strong>
+          <strong>{{printf "%.6f" .CurrentUSDtoEUR}}</strong>
         </p>
       </div>
       <div class="rate">
@@ -82,29 +82,39 @@
       var usdToEur = {{.USDToEUR}};
       var btcToUsd = {{.BTCToUSD}};
 
+      // Convert times to JavaScript Date objects
+      var timesFormatted = times.map(function(t) {
+          return new Date(t);
+      });
+
+      var now = new Date();
+      var thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+
       // USD to EUR chart (left)
       var trace1 = {
-          x: times,
-          y: usdToEur,
+          x: timesFormatted,
+          y: usdToEur.map(Number),
           mode: 'lines+markers',
           name: 'USD to EUR',
           line: {color: '#007BFF', width: 3},
           marker: {size: 6, color: '#007BFF'},
-          hovertemplate: '%{x}<br>USD to EUR: %{y:.4f}<extra></extra>'
+          hovertemplate: '%{x|%H:%M:%S}<br>USD to EUR: %{y:.6f}<extra></extra>'
       };
 
       var layout1 = {
           title: 'USD to EUR Exchange Rate',
           xaxis: {
               title: 'Time',
+              type: 'date',
+              range: [thirtyMinutesAgo, now],
               showgrid: true,
               zeroline: false
           },
           yaxis: {
               title: 'Exchange Rate',
+              autorange: true,
               showline: false,
-              side: 'left',
-              range: [0.85, 1.05] // Set y-axis range between 0.85 and 1.05
+              side: 'left'
           },
           template: 'plotly_white',
           margin: {l: 60, r: 60, t: 50, b: 50},
@@ -121,24 +131,27 @@
 
       // BTC to USD chart (right)
       var trace2 = {
-          x: times,
-          y: btcToUsd,
+          x: timesFormatted,
+          y: btcToUsd.map(Number),
           mode: 'lines+markers',
           name: 'BTC to USD',
           line: {color: '#FF5733', width: 3},
           marker: {size: 6, color: '#FF5733'},
-          hovertemplate: '%{x}<br>BTC to USD: %{y:.2f}<extra></extra>'
+          hovertemplate: '%{x|%H:%M:%S}<br>BTC to USD: %{y:.2f}<extra></extra>'
       };
 
       var layout2 = {
           title: 'BTC to USD Exchange Rate',
           xaxis: {
               title: 'Time',
+              type: 'date',
+              range: [thirtyMinutesAgo, now],
               showgrid: true,
               zeroline: false
           },
           yaxis: {
               title: 'Exchange Rate',
+              autorange: true,
               showline: false,
               side: 'left',
               automargin: true

@@ -32,7 +32,7 @@ type BTCToUSDResponse struct {
 }
 
 type DataPoint struct {
-	Time     string
+	Time     time.Time // Changed from string to time.Time
 	USDToEUR float64
 	BTCToUSD float64
 }
@@ -75,7 +75,7 @@ func fetchExchangeRates() {
 	for {
 		<-ticker.C
 
-		currentTime := time.Now().Format("15:04:05")
+		currentTime := time.Now()
 
 		// Fetch USD to EUR rate
 		var usdToEurResp USDToEURResponse
@@ -105,10 +105,14 @@ func fetchExchangeRates() {
 			BTCToUSD: btcToUsdResp.Bpi.USD.RateFloat,
 		})
 
-		// Keep only the last 20 data points
-		if len(data) > 20 {
-			data = data[len(data)-20:]
+		// Remove data points older than 30 minutes
+		cutoff := currentTime.Add(-30 * time.Minute)
+		i := 0
+		for i < len(data) && data[i].Time.Before(cutoff) {
+			i++
 		}
+		data = data[i:]
+
 		mu.Unlock()
 	}
 }
@@ -123,15 +127,17 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	usdToEur := []float64{}
 	btcToUsd := []float64{}
 	var currentUSDtoEUR, currentBTCtoUSD float64
+
 	for _, point := range data {
-		times = append(times, point.Time)
+		times = append(times, point.Time.Format(time.RFC3339))
 		usdToEur = append(usdToEur, point.USDToEUR)
 		btcToUsd = append(btcToUsd, point.BTCToUSD)
 	}
 
 	if len(data) > 0 {
-		currentUSDtoEUR = data[len(data)-1].USDToEUR
-		currentBTCtoUSD = data[len(data)-1].BTCToUSD
+		lastPoint := data[len(data)-1]
+		currentUSDtoEUR = lastPoint.USDToEUR
+		currentBTCtoUSD = lastPoint.BTCToUSD
 	}
 
 	// Serialize data to JSON
