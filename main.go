@@ -1,8 +1,10 @@
+// main.go
 package main
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"io"
 	"log"
@@ -10,29 +12,31 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
-// API response structures
-type USDToEURResponse struct {
-	Rates struct {
-		EUR float64 `json:"EUR"`
-	} `json:"rates"`
-	Result string `json:"result"`
-}
-
+// Struct for BTC to USD response from CoinDesk
 type BTCToUSDResponse struct {
 	Bpi struct {
 		USD struct {
-			RateFloat float64 `json:"rate_float"`
+			Code        string  `json:"code"`
+			Symbol      string  `json:"symbol"`
+			Rate        string  `json:"rate"`
+			Description string  `json:"description"`
+			RateFloat   float64 `json:"rate_float"`
 		} `json:"USD"`
 	} `json:"bpi"`
 }
 
+// Struct to store data points
 type DataPoint struct {
-	Time     time.Time // Changed from string to time.Time
+	Time     time.Time
 	USDToEUR float64
 	BTCToUSD float64
 }
@@ -42,87 +46,157 @@ var (
 	mu   sync.Mutex
 )
 
-// Function to fetch data from API
-func fetchAPI(ctx context.Context, url string, target interface{}) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+// Function to fetch BTC to USD from CoinDesk API
+func fetchBTCToUSD() (float64, error) {
+	url := "https://api.coindesk.com/v1/bpi/currentprice/USD.json"
+	resp, err := http.Get(url)
 	if err != nil {
-		return err
-	}
-
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
+		return 0, fmt.Errorf("error fetching BTC to USD: %v", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return 0, fmt.Errorf("error reading BTC to USD response: %v", err)
 	}
 
-	return json.Unmarshal(body, target)
+	var btcResp BTCToUSDResponse
+	err = json.Unmarshal(body, &btcResp)
+	if err != nil {
+		return 0, fmt.Errorf("error parsing BTC to USD JSON: %v", err)
+	}
+
+	return btcResp.Bpi.USD.RateFloat, nil
 }
 
-// Function to periodically fetch exchange rates
+// Function to fetch USD to EUR by scraping x-rates.com
+func fetchUSDtoEUR() (float64, error) {
+	url := "https://www.x-rates.com/calculator/?from=USD&to=EUR&amount=1"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("error creating request for USD to EUR: %v", err)
+	}
+	// Используем реалистичный User-Agent
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "+
+		"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("error fetching USD to EUR: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return 0, fmt.Errorf("non-200 HTTP status for USD to EUR: %d", resp.StatusCode)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("error parsing USD to EUR HTML: %v", err)
+	}
+
+	// Найдем <span class="ccOutputRslt">0.9425<span class="ccOutputTrail">86</span><span class="ccOutputCode"> EUR</span></span>
+	rateStr := ""
+	doc.Find("span.ccOutputRslt").EachWithBreak(func(i int, s *goquery.Selection) bool {
+		mainRate := strings.TrimSpace(s.Contents().FilterFunction(func(i int, s *goquery.Selection) bool {
+			return goquery.NodeName(s) == "#text"
+		}).Text())
+
+		trailingRate := strings.TrimSpace(s.Find("span.ccOutputTrail").Text())
+
+		if mainRate == "" && trailingRate == "" {
+			return true // Продолжить поиск
+		}
+
+		if trailingRate == "" {
+			rateStr = mainRate
+		} else {
+			rateStr = mainRate + trailingRate
+		}
+		return false // Прекратить поиск после первого совпадения
+	})
+
+	if rateStr == "" {
+		return 0, fmt.Errorf("USD to EUR rate not found")
+	}
+
+	// Удаляем любые запятые и парсим число
+	rateStr = strings.ReplaceAll(rateStr, ",", "")
+	rateValue, err := strconv.ParseFloat(rateStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("error parsing USD to EUR rate: %v", err)
+	}
+
+	return rateValue, nil
+}
+
+// Function to fetch and store data
+func fetchData() {
+	currentTime := time.Now()
+
+	usdToEur, err := fetchUSDtoEUR()
+	if err != nil {
+		log.Println("Error fetching USD to EUR:", err)
+		return
+	}
+
+	btcToUsd, err := fetchBTCToUSD()
+	if err != nil {
+		log.Println("Error fetching BTC to USD:", err)
+		return
+	}
+
+	mu.Lock()
+	data = append(data, DataPoint{
+		Time:     currentTime,
+		USDToEUR: usdToEur,
+		BTCToUSD: btcToUsd,
+	})
+
+	// Remove data older than 30 minutes
+	cutoff := currentTime.Add(-30 * time.Minute)
+	i := 0
+	for i < len(data) && data[i].Time.Before(cutoff) {
+		i++
+	}
+	data = data[i:]
+	mu.Unlock()
+
+	log.Printf("Fetched USD to EUR: %.6f at %s", usdToEur, currentTime.Format(time.RFC3339))
+	log.Printf("Fetched BTC to USD: %.2f at %s", btcToUsd, currentTime.Format(time.RFC3339))
+}
+
+// Goroutine to periodically fetch data every 10 seconds
 func fetchExchangeRates() {
+	fetchData()
+
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		<-ticker.C
-
-		currentTime := time.Now()
-
-		// Fetch USD to EUR rate
-		var usdToEurResp USDToEURResponse
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		err := fetchAPI(ctx, "https://open.er-api.com/v6/latest/USD", &usdToEurResp)
-		cancel()
-		if err != nil {
-			log.Println("Error fetching USD to EUR:", err)
-			continue
-		}
-
-		// Fetch BTC to USD rate
-		var btcToUsdResp BTCToUSDResponse
-		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-		err = fetchAPI(ctx, "https://api.coindesk.com/v1/bpi/currentprice/USD.json", &btcToUsdResp)
-		cancel()
-		if err != nil {
-			log.Println("Error fetching BTC to USD:", err)
-			continue
-		}
-
-		// Save data point
-		mu.Lock()
-		data = append(data, DataPoint{
-			Time:     currentTime,
-			USDToEUR: usdToEurResp.Rates.EUR,
-			BTCToUSD: btcToUsdResp.Bpi.USD.RateFloat,
-		})
-
-		// Remove data points older than 30 minutes
-		cutoff := currentTime.Add(-30 * time.Minute)
-		i := 0
-		for i < len(data) && data[i].Time.Before(cutoff) {
-			i++
-		}
-		data = data[i:]
-
-		mu.Unlock()
+		fetchData()
 	}
 }
 
-// HTTP handler function
+// Handler for the main page
 func handler(w http.ResponseWriter, r *http.Request) {
+	tmplPath := filepath.Join("templates", "index.html")
+	t, err := template.ParseFiles(tmplPath)
+	if err != nil {
+		http.Error(w, "Server Error", http.StatusInternalServerError)
+		log.Println("Template parsing error:", err)
+		return
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
 
-	// Prepare data for the template
 	times := []string{}
 	usdToEur := []float64{}
 	btcToUsd := []float64{}
@@ -135,63 +209,96 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(data) > 0 {
-		lastPoint := data[len(data)-1]
-		currentUSDtoEUR = lastPoint.USDToEUR
-		currentBTCtoUSD = lastPoint.BTCToUSD
-	}
-
-	// Serialize data to JSON
-	timesJSON, err := json.Marshal(times)
-	if err != nil {
-		http.Error(w, "Server error", http.StatusInternalServerError)
-		return
-	}
-	usdToEurJSON, err := json.Marshal(usdToEur)
-	if err != nil {
-		http.Error(w, "Server error", http.StatusInternalServerError)
-		return
-	}
-	btcToUsdJSON, err := json.Marshal(btcToUsd)
-	if err != nil {
-		http.Error(w, "Server error", http.StatusInternalServerError)
-		return
+		last := data[len(data)-1]
+		currentUSDtoEUR = last.USDToEUR
+		currentBTCtoUSD = last.BTCToUSD
 	}
 
 	tmplData := map[string]interface{}{
-		"Times":           template.JS(timesJSON),
-		"USDToEUR":        template.JS(usdToEurJSON),
-		"BTCToUSD":        template.JS(btcToUsdJSON),
+		"Times":           template.JS(jsonMustMarshal(times)),
+		"USDToEUR":        template.JS(jsonMustMarshal(usdToEur)),
+		"BTCToUSD":        template.JS(jsonMustMarshal(btcToUsd)),
 		"CurrentUSDtoEUR": currentUSDtoEUR,
 		"CurrentBTCtoUSD": currentBTCtoUSD,
 	}
 
-	// Load template from file
-	tmplPath := filepath.Join("templates", "index.html")
-	t, err := template.ParseFiles(tmplPath)
-	if err != nil {
-		http.Error(w, "Server error", http.StatusInternalServerError)
-		log.Println("Error loading template:", err)
-		return
-	}
-
 	err = t.Execute(w, tmplData)
 	if err != nil {
-		http.Error(w, "Server error", http.StatusInternalServerError)
-		log.Println("Error executing template:", err)
+		http.Error(w, "Server Error", http.StatusInternalServerError)
+		log.Println("Template execution error:", err)
 		return
 	}
+}
+
+// Handler for the /data endpoint
+func dataHandler(w http.ResponseWriter, r *http.Request) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	type DataResponse struct {
+		Times           []string  `json:"times"`
+		USDToEUR        []float64 `json:"usdToEur"`
+		BTCToUSD        []float64 `json:"btcToUsd"`
+		CurrentUSDtoEUR float64   `json:"currentUSDtoEUR"`
+		CurrentBTCtoUSD float64   `json:"currentBTCtoUSD"`
+	}
+
+	times := []string{}
+	usdToEur := []float64{}
+	btcToUsd := []float64{}
+	var currentUSDtoEUR, currentBTCtoUSD float64
+
+	for _, point := range data {
+		times = append(times, point.Time.Format(time.RFC3339))
+		usdToEur = append(usdToEur, point.USDToEUR)
+		btcToUsd = append(btcToUsd, point.BTCToUSD)
+	}
+
+	if len(data) > 0 {
+		last := data[len(data)-1]
+		currentUSDtoEUR = last.USDToEUR
+		currentBTCtoUSD = last.BTCToUSD
+	}
+
+	response := DataResponse{
+		Times:           times,
+		USDToEUR:        usdToEur,
+		BTCToUSD:        btcToUsd,
+		CurrentUSDtoEUR: currentUSDtoEUR,
+		CurrentBTCtoUSD: currentBTCtoUSD,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(response)
+	if err != nil {
+		http.Error(w, "Server Error", http.StatusInternalServerError)
+		log.Println("JSON encoding error:", err)
+		return
+	}
+}
+
+// Helper function to marshal JSON and handle errors
+func jsonMustMarshal(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		log.Println("JSON marshal error:", err)
+		return "[]"
+	}
+	return string(b)
 }
 
 func main() {
 	// Start fetching exchange rates
 	go fetchExchangeRates()
 
-	// Handle system signals for graceful shutdown
+	// Handle graceful shutdown
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	// Setup and start HTTP server
+	// Set up HTTP handlers
 	http.HandleFunc("/", handler)
+	http.HandleFunc("/data", dataHandler)
+
 	srv := &http.Server{
 		Addr: ":8080",
 	}
@@ -207,7 +314,7 @@ func main() {
 	<-sigs
 	log.Println("Shutting down server...")
 
-	// Create context with timeout for server shutdown
+	// Shutdown server with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
