@@ -136,5 +136,4 @@ Go-based web application that fetches and displays real-time currency exchange r
 - **Responsive Design:** Implement media queries to ensure the application looks good on various screen sizes.
 - **Extended Data Retention:** Adjust the data retention policy based on user needs, potentially allowing for longer historical data.
 - **Additional Exchange Rates:** Expand the application to include more currency pairs or cryptocurrencies.
-- **Authentication:** Secure the application by adding authentication mechanisms if deployed publicly.
 - **Deployment:** Consider containerizing the application using Docker for easier deployment and scalability.
