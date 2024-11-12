@@ -9,17 +9,19 @@
       body {
         font-family: "Arial", sans-serif;
         background-color: #f4f4f9;
-        color: #333;
+        color: #000; /* Changed to black */
         margin: 0;
         padding: 20px;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: flex-start; /* Для лучшего позиционирования */
+        justify-content: flex-start; /* For better positioning */
       }
       h1 {
         margin-bottom: 20px;
-        color: #2c3e50;
+        color: #000; /* Changed to black */
+        font-size: 2.5em; /* Increased font size */
+        font-weight: bold; /* Made bold */
       }
       .chart-container {
         display: flex;
@@ -40,8 +42,9 @@
       .rate-display {
         margin-top: 10px;
         text-align: center;
-        font-size: 1.2em;
-        color: #2c3e50;
+        font-size: 1.5em; /* Increased font size */
+        color: #000; /* Changed to black */
+        font-weight: bold; /* Made bold */
       }
       .rates-container {
         display: flex;
@@ -50,7 +53,7 @@
         justify-content: center;
         align-items: flex-start;
         gap: 50px;
-        margin-top: 20px; /* Для отделения от графиков */
+        margin-top: 20px; /* Separation from charts */
       }
       .rate {
         width: 45%;
@@ -58,11 +61,30 @@
       }
       .status {
         margin-top: 20px;
-        font-size: 1.1em;
+        font-size: 1.2em; /* Increased font size */
+        font-weight: bold; /* Made bold */
         color: green;
       }
       .status.error {
         color: red;
+      }
+      /* Adjusting Plotly graph titles and labels */
+      .plotly .main-svg .title-text {
+        font-size: 24px; /* Increased title font size */
+        font-weight: bold; /* Made title bold */
+        fill: #000; /* Changed title color to black */
+      }
+      .plotly .main-svg .xtitle-text,
+      .plotly .main-svg .ytitle-text {
+        font-size: 18px; /* Increased axis titles font size */
+        font-weight: bold; /* Made axis titles bold */
+        fill: #000; /* Changed axis titles color to black */
+      }
+      .plotly .main-svg .xtick,
+      .plotly .main-svg .ytick {
+        font-size: 14px; /* Increased tick labels font size */
+        font-weight: bold; /* Made tick labels bold */
+        fill: #000; /* Changed tick labels color to black */
       }
     </style>
   </head>
@@ -99,7 +121,7 @@
       // Function to create charts
       function createCharts() {
           var now = new Date();
-          var oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); // 1 час назад
+          var oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); // 1 hour ago
 
           // USD to EUR Chart
           var trace1 = {
@@ -113,28 +135,46 @@
           };
 
           var layout1 = {
-              title: '', // Удален заголовок
+              title: '', // Removed "Exchange Rate" title
               xaxis: {
                   type: 'date',
                   range: [oneHourAgo, now],
                   showgrid: true,
                   zeroline: false,
-                  tickformat: "%H:%M:%S"
+                  tickformat: "%H:%M:%S",
+                  tickfont: {
+                      size: 14, // Increased tick font size
+                      color: '#000', // Changed tick font color to black
+                      family: 'Arial, sans-serif',
+                      weight: 'bold' // Made tick fonts bold
+                  }
               },
               yaxis: {
-                  range: [0.85, 1.05], // Фиксированный диапазон для EUR
-                  autorange: true, // Отключено авто масштабирование
+                  range: [0.85, 1.05], // Fixed Y-axis range for EUR
+                  autorange: true, // Disabled auto-scaling
                   showline: false,
-                  side: 'left'
+                  side: 'left',
+                  tickfont: {
+                      size: 14, // Increased tick font size
+                      color: '#000', // Changed tick font color to black
+                      family: 'Arial, sans-serif',
+                      weight: 'bold' // Made tick fonts bold
+                  }
               },
               template: 'plotly_white',
-              margin: {l: 50, r: 50, t: 50, b: 50}, // Увеличены отступы слева до 100
+              margin: {l: 100, r: 60, t: 40, b: 50}, // Increased left margin
               showlegend: true,
               legend: {
                   x: 0.5,
                   y: -0.2,
                   xanchor: 'center',
-                  orientation: 'h'
+                  orientation: 'h',
+                  font: {
+                      size: 14, // Increased legend font size
+                      color: '#000', // Changed legend font color to black
+                      family: 'Arial, sans-serif',
+                      weight: 'bold' // Made legend fonts bold
+                  }
               }
           };
 
@@ -152,28 +192,46 @@
           };
 
           var layout2 = {
-              title: '', // Удален заголовок
+              title: '', // Removed "Exchange Rate" title
               xaxis: {
                   type: 'date',
                   range: [oneHourAgo, now],
                   showgrid: true,
                   zeroline: false,
-                  tickformat: "%H:%M:%S"
+                  tickformat: "%H:%M:%S",
+                  tickfont: {
+                      size: 14, // Increased tick font size
+                      color: '#000', // Changed tick font color to black
+                      family: 'Arial, sans-serif',
+                      weight: 'bold' // Made tick fonts bold
+                  }
               },
               yaxis: {
                   autorange: true,
                   showline: false,
                   side: 'left',
-                  tickformat: ".0f" // Форматирование до 4 знаков
+                  tickformat: ",.4f", // Format to 4 decimal places
+                  tickfont: {
+                      size: 14, // Increased tick font size
+                      color: '#000', // Changed tick font color to black
+                      family: 'Arial, sans-serif',
+                      weight: 'bold' // Made tick fonts bold
+                  }
               },
               template: 'plotly_white',
-              margin: {l: 50, r: 50, t: 50, b: 50}, // Увеличены отступы слева до 100
+              margin: {l: 100, r: 70, t: 40, b: 50}, // Increased left margin
               showlegend: true,
               legend: {
                   x: 0.5,
                   y: -0.2,
                   xanchor: 'center',
-                  orientation: 'h'
+                  orientation: 'h',
+                  font: {
+                      size: 14, // Increased legend font size
+                      color: '#000', // Changed legend font color to black
+                      family: 'Arial, sans-serif',
+                      weight: 'bold' // Made legend fonts bold
+                  }
               }
           };
 
@@ -233,7 +291,7 @@
       // Initial data fetch and chart creation
       fetchDataAndUpdate();
 
-      // Update data every 10 секунд
+      // Update data every 10 seconds
       setInterval(fetchDataAndUpdate, 10000);
     </script>
   </body>
