@@ -42,8 +42,9 @@ type DataPoint struct {
 }
 
 var (
-	data []DataPoint
-	mu   sync.Mutex
+	data   []DataPoint
+	mu     sync.Mutex
+	status string = "All is working" // Инициализируем статус
 )
 
 // Function to fetch BTC to USD from CoinDesk API
@@ -54,6 +55,10 @@ func fetchBTCToUSD() (float64, error) {
 		return 0, fmt.Errorf("error fetching BTC to USD: %v", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return 0, fmt.Errorf("non-200 HTTP status for BTC to USD: %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -103,10 +108,12 @@ func fetchUSDtoEUR() (float64, error) {
 	// Найдем <span class="ccOutputRslt">0.9425<span class="ccOutputTrail">86</span><span class="ccOutputCode"> EUR</span></span>
 	rateStr := ""
 	doc.Find("span.ccOutputRslt").EachWithBreak(func(i int, s *goquery.Selection) bool {
+		// Основная часть курса
 		mainRate := strings.TrimSpace(s.Contents().FilterFunction(func(i int, s *goquery.Selection) bool {
 			return goquery.NodeName(s) == "#text"
 		}).Text())
 
+		// Дополнительная часть курса
 		trailingRate := strings.TrimSpace(s.Find("span.ccOutputTrail").Text())
 
 		if mainRate == "" && trailingRate == "" {
@@ -142,12 +149,18 @@ func fetchData() {
 	usdToEur, err := fetchUSDtoEUR()
 	if err != nil {
 		log.Println("Error fetching USD to EUR:", err)
+		mu.Lock()
+		status = "Error fetching USD to EUR"
+		mu.Unlock()
 		return
 	}
 
 	btcToUsd, err := fetchBTCToUSD()
 	if err != nil {
 		log.Println("Error fetching BTC to USD:", err)
+		mu.Lock()
+		status = "Error fetching BTC to USD"
+		mu.Unlock()
 		return
 	}
 
@@ -158,17 +171,18 @@ func fetchData() {
 		BTCToUSD: btcToUsd,
 	})
 
-	// Remove data older than 30 minutes
-	cutoff := currentTime.Add(-30 * time.Minute)
+	// Remove data older than 1 hour (изменено с 30 минут на 1 час)
+	cutoff := currentTime.Add(-1 * time.Hour)
 	i := 0
 	for i < len(data) && data[i].Time.Before(cutoff) {
 		i++
 	}
 	data = data[i:]
+	status = "All is working"
 	mu.Unlock()
 
 	log.Printf("Fetched USD to EUR: %.6f at %s", usdToEur, currentTime.Format(time.RFC3339))
-	log.Printf("Fetched BTC to USD: %.2f at %s", btcToUsd, currentTime.Format(time.RFC3339))
+	log.Printf("Fetched BTC to USD: %.4f at %s", btcToUsd, currentTime.Format(time.RFC3339)) // 4 знака после запятой
 }
 
 // Goroutine to periodically fetch data every 10 seconds
@@ -200,7 +214,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	times := []string{}
 	usdToEur := []float64{}
 	btcToUsd := []float64{}
-	var currentUSDtoEUR, currentBTCtoUSD float64
+	var currentUSDtoEUR, currentBTCtoUSD string
 
 	for _, point := range data {
 		times = append(times, point.Time.Format(time.RFC3339))
@@ -210,8 +224,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	if len(data) > 0 {
 		last := data[len(data)-1]
-		currentUSDtoEUR = last.USDToEUR
-		currentBTCtoUSD = last.BTCToUSD
+		currentUSDtoEUR = fmt.Sprintf("%.6f", last.USDToEUR)
+		currentBTCtoUSD = fmt.Sprintf("%.4f", last.BTCToUSD) // 4 знака после запятой
 	}
 
 	tmplData := map[string]interface{}{
@@ -220,6 +234,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		"BTCToUSD":        template.JS(jsonMustMarshal(btcToUsd)),
 		"CurrentUSDtoEUR": currentUSDtoEUR,
 		"CurrentBTCtoUSD": currentBTCtoUSD,
+		"Status":          template.JS(jsonMustMarshal(status)),
 	}
 
 	err = t.Execute(w, tmplData)
@@ -239,14 +254,15 @@ func dataHandler(w http.ResponseWriter, r *http.Request) {
 		Times           []string  `json:"times"`
 		USDToEUR        []float64 `json:"usdToEur"`
 		BTCToUSD        []float64 `json:"btcToUsd"`
-		CurrentUSDtoEUR float64   `json:"currentUSDtoEUR"`
-		CurrentBTCtoUSD float64   `json:"currentBTCtoUSD"`
+		CurrentUSDtoEUR string    `json:"currentUSDtoEUR"`
+		CurrentBTCtoUSD string    `json:"currentBTCtoUSD"`
+		Status          string    `json:"status"`
 	}
 
 	times := []string{}
 	usdToEur := []float64{}
 	btcToUsd := []float64{}
-	var currentUSDtoEUR, currentBTCtoUSD float64
+	var currentUSDtoEUR, currentBTCtoUSD, currentStatus string
 
 	for _, point := range data {
 		times = append(times, point.Time.Format(time.RFC3339))
@@ -256,9 +272,11 @@ func dataHandler(w http.ResponseWriter, r *http.Request) {
 
 	if len(data) > 0 {
 		last := data[len(data)-1]
-		currentUSDtoEUR = last.USDToEUR
-		currentBTCtoUSD = last.BTCToUSD
+		currentUSDtoEUR = fmt.Sprintf("%.6f", last.USDToEUR)
+		currentBTCtoUSD = fmt.Sprintf("%.4f", last.BTCToUSD) // 4 знака после запятой
 	}
+
+	currentStatus = status
 
 	response := DataResponse{
 		Times:           times,
@@ -266,6 +284,7 @@ func dataHandler(w http.ResponseWriter, r *http.Request) {
 		BTCToUSD:        btcToUsd,
 		CurrentUSDtoEUR: currentUSDtoEUR,
 		CurrentBTCtoUSD: currentBTCtoUSD,
+		Status:          currentStatus,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -15,7 +15,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start; /* Для лучшего позиционирования */
       }
       h1 {
         margin-bottom: 20px;
@@ -50,10 +50,19 @@
         justify-content: center;
         align-items: flex-start;
         gap: 50px;
+        margin-top: 20px; /* Для отделения от графиков */
       }
       .rate {
         width: 45%;
         text-align: center;
+      }
+      .status {
+        margin-top: 20px;
+        font-size: 1.1em;
+        color: green;
+      }
+      .status.error {
+        color: red;
       }
     </style>
   </head>
@@ -75,10 +84,12 @@
         </p>
       </div>
     </div>
+    <div class="status" id="statusIndicator">Loading...</div>
     <script>
       var times = {{.Times}};
       var usdToEur = {{.USDToEUR}};
       var btcToUsd = {{.BTCToUSD}};
+      var status = {{.Status}};
 
       // Convert times to Date objects
       var timesFormatted = times.map(function(t) {
@@ -88,7 +99,7 @@
       // Function to create charts
       function createCharts() {
           var now = new Date();
-          var thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+          var oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); // 1 час назад
 
           // USD to EUR Chart
           var trace1 = {
@@ -102,24 +113,22 @@
           };
 
           var layout1 = {
-              title: 'USD to EUR Exchange Rate',
+              title: '', // Удален заголовок
               xaxis: {
-                  title: 'Time',
                   type: 'date',
-                  range: [thirtyMinutesAgo, now],
+                  range: [oneHourAgo, now],
                   showgrid: true,
                   zeroline: false,
                   tickformat: "%H:%M:%S"
               },
               yaxis: {
-                  title: 'Exchange Rate',
-                  autorange: true,
+                  range: [0.85, 1.05], // Фиксированный диапазон для EUR
+                  autorange: true, // Отключено авто масштабирование
                   showline: false,
-                  side: 'left',
-                  // Adjust range as needed or remove to let Plotly autoscale
+                  side: 'left'
               },
               template: 'plotly_white',
-              margin: {l: 60, r: 60, t: 50, b: 50},
+              margin: {l: 50, r: 50, t: 50, b: 50}, // Увеличены отступы слева до 100
               showlegend: true,
               legend: {
                   x: 0.5,
@@ -143,24 +152,22 @@
           };
 
           var layout2 = {
-              title: 'BTC to USD Exchange Rate',
+              title: '', // Удален заголовок
               xaxis: {
-                  title: 'Time',
                   type: 'date',
-                  range: [thirtyMinutesAgo, now],
+                  range: [oneHourAgo, now],
                   showgrid: true,
                   zeroline: false,
                   tickformat: "%H:%M:%S"
               },
               yaxis: {
-                  title: 'Exchange Rate',
                   autorange: true,
                   showline: false,
                   side: 'left',
-                  // Adjust range as needed or remove to let Plotly autoscale
+                  tickformat: ".0f" // Форматирование до 4 знаков
               },
               template: 'plotly_white',
-              margin: {l: 70, r: 70, t: 50, b: 50},
+              margin: {l: 50, r: 50, t: 50, b: 50}, // Увеличены отступы слева до 100
               showlegend: true,
               legend: {
                   x: 0.5,
@@ -171,6 +178,21 @@
           };
 
           Plotly.newPlot('chart2', [trace2], layout2);
+      }
+
+      // Function to update status indicator
+      function updateStatus(statusText) {
+          var statusIndicator = document.getElementById('statusIndicator');
+          statusIndicator.textContent = statusText;
+          if (statusText === "All is working") {
+              statusIndicator.classList.remove('error');
+              statusIndicator.classList.add('success');
+              statusIndicator.style.color = "green";
+          } else {
+              statusIndicator.classList.remove('success');
+              statusIndicator.classList.add('error');
+              statusIndicator.style.color = "red";
+          }
       }
 
       // Function to fetch new data and update the page
@@ -186,27 +208,32 @@
               times = dataResponse.times;
               usdToEur = dataResponse.usdToEur;
               btcToUsd = dataResponse.btcToUsd;
+              status = dataResponse.status;
 
               // Update formatted times
               timesFormatted = times.map(function(t) {
                   return new Date(t);
               });
 
-              // Update displayed rates without ограничений на количество знаков
+              // Update displayed rates
               document.getElementById('usdToEurRate').textContent = dataResponse.currentUSDtoEUR;
               document.getElementById('btcToUsdRate').textContent = dataResponse.currentBTCtoUSD;
+
+              // Update status indicator
+              updateStatus(status);
 
               // Recreate charts
               createCharts();
           } catch (e) {
               console.error("Error fetching and updating data:", e);
+              updateStatus("Error fetching data");
           }
       }
 
       // Initial data fetch and chart creation
       fetchDataAndUpdate();
 
-      // Update data every 10 seconds
+      // Update data every 10 секунд
       setInterval(fetchDataAndUpdate, 10000);
     </script>
   </body>
